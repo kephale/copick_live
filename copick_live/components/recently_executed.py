@@ -29,3 +29,18 @@ def layout():
 def refresh_recent_solutions(n_clicks, n_intervals):
     solutions = get_recently_executed_solutions()
     return [create_solution_card(solution) for solution in solutions]
+
+def register_callbacks(app, album_instance):
+    @app.callback(
+        Output("recent-solutions-container", "children"),
+        [Input("refresh-recent-solutions", "n_clicks"),
+         Input("refresh-interval", "n_intervals")],
+        [State("recent-solutions-container", "children")]
+    )
+    def refresh_recent_solutions(n_clicks, n_intervals, current_children):
+        def get_recent_solutions():
+            solutions = album_instance.get_collection_index().get_recently_launched_solutions()
+            return [s.setup() for s in solutions]
+
+        solutions = get_recent_solutions()
+        return html.Div([create_solution_card(solution) for solution in solutions])
