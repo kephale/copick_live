@@ -6,7 +6,7 @@ def layout():
     catalogs = get_catalogs()
     
     return html.Div([
-        html.H1("Run Solution"),
+        html.H1("Album Solutions"),
         dbc.Form([
             dbc.Row([
                 dbc.Col([

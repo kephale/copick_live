@@ -35,6 +35,7 @@ def run_solution(n_clicks, catalog, group, name, version, arg_values, arg_ids):
 
 @callback(
     Output("solution-output", "children"),
+    Output("solution-output-interval", "disabled"),
     Input("solution-output-interval", "n_intervals"),
     State("task-id-store", "data"),
     prevent_initial_call=True
@@ -44,16 +45,16 @@ def update_solution_output(n_intervals, task_id):
         task = run_album_solution.AsyncResult(str(task_id))
         logger.info(f"Task {task_id} state: {task.state}")
         if task.state == 'PENDING':
-            return 'Task is pending... This could mean the task is waiting to be picked up by a worker.'
+            return 'Task is pending...', False
         elif task.state == 'STARTED':
-            return 'Task has been started and is currently running...'
+            return 'Task has been started and is currently running...', False
         elif task.state == 'SUCCESS':
             if task.result:
-                return html.Pre(task.result['output'])
+                return html.Pre(task.result['output']), True  # Disable interval
             else:
-                return 'Task completed successfully, but no output was returned.'
+                return 'Task completed successfully, but no output was returned.', True  # Disable interval
         elif task.state == 'FAILURE':
-            return f'Task failed: {str(task.result)}'
+            return f'Task failed: {str(task.result)}', True  # Disable interval
         else:
-            return f'Unknown task state: {task.state}'
-    return ''
+            return f'Unknown task state: {task.state}', False
+    return '', False
