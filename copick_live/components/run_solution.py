@@ -1,8 +1,9 @@
 import json
 import dash_bootstrap_components as dbc
 from dash import html, dcc, callback, Input, Output, State, ALL
+from dash.exceptions import PreventUpdate
 from copick_live.utils.album_utils import get_catalogs, get_groups, get_names, get_versions, get_solution_args
-from copick_live.celery_tasks import submit_slurm_job
+from copick_live.celery_tasks import submit_slurm_job, check_slurm_job_status
 
 import logging
 from celery.utils.log import get_task_logger
@@ -48,6 +49,7 @@ def layout():
             ]),
             dbc.Row([
                 dbc.Col([
+                    dbc.Input(id="slurm-host-input", type="text", placeholder="Enter SLURM host", className="mb-3"),                    
                     dbc.Button("Submit SLURM Job", id="submit-slurm-button", color="secondary", className="mt-3"),
                     html.Div(id="submit-slurm-output", className="mt-3"),
                 ], width=12),
@@ -125,26 +127,39 @@ def update_dynamic_args(catalog, group, name, version):
     State("group-input", "value"),
     State("name-input", "value"),
     State("version-input", "value"),
+    State("slurm-host-input", "value"),
     State({"type": "arg-input", "index": ALL}, "value"),
     State({"type": "arg-input", "index": ALL}, "id"),
     prevent_initial_call=True
 )
-def submit_slurm(n_clicks, catalog, group, name, version, arg_values, arg_ids):
-    if n_clicks:
-        args = {}
-        for arg_id, arg_value in zip(arg_ids, arg_values):
-            if arg_value:
-                args[arg_id['index']] = arg_value
-        
-        logger.info(f"Submitting SLURM job for {catalog}:{group}:{name}:{version}")
-        task = submit_slurm_job.delay(catalog, group, name, version, args=json.dumps(args))
+def submit_slurm(n_clicks, catalog, group, name, version, slurm_host, arg_values, arg_ids):
+    logger.info(f"submit_slurm function called. n_clicks: {n_clicks}")
+    if not n_clicks:
+        logger.info("No clicks detected, preventing update")
+        raise PreventUpdate
+
+    if not all([catalog, group, name, version, slurm_host]):
+        logger.warning("Missing required inputs for SLURM job submission")
+        return "Please fill in all required fields (catalog, group, name, version, SLURM host)"
+
+    args = {}
+    for arg_id, arg_value in zip(arg_ids, arg_values):
+        if arg_value:
+            args[arg_id['index']] = arg_value
+    
+    logger.info(f"Submitting SLURM job for {catalog}:{group}:{name}:{version} on {slurm_host}")
+    try:
+        task = submit_slurm_job.delay(catalog, group, name, version, slurm_host, args=json.dumps(args))
+        logger.info(f"SLURM job submission task created with ID: {task.id}")
         return dcc.Loading(id="loading-submit-slurm", children=[
             html.Div(f"SLURM job submission started with task ID: {task.id}"),
             dcc.Interval(id='slurm-output-interval', interval=1000, n_intervals=0),
             html.Div(id='slurm-status-output'),
             dcc.Store(id='slurm-task-id-store', data=str(task.id))
         ])
-    return ""
+    except Exception as e:
+        logger.exception("Error occurred while submitting SLURM job")
+        return f"An error occurred while submitting the SLURM job: {str(e)}"
 
 @callback(
     Output("slurm-status-output", "children"),
@@ -159,12 +174,13 @@ def update_slurm_status(n_intervals, task_id):
         if task.state == 'PENDING':
             return 'SLURM job submission is pending...'
         elif task.state == 'STARTED':
-            return 'SLURM job submission is in progress...'
+            return 'SLURM job is running...'
         elif task.state == 'SUCCESS':
-            if task.result:
-                return f"SLURM job submitted successfully. Job ID: {task.result.get('slurm_job_id', 'Unknown')}"
-            else:
-                return 'SLURM job submission completed, but no job ID was returned.'
+            result = task.result
+            job_id = result.get('job_id')
+            slurm_host = result.get('slurm_host')
+            check_slurm_job_status.delay(job_id, slurm_host)
+            return f"SLURM job submitted successfully. Job ID: {job_id}"
         elif task.state == 'FAILURE':
             return f'SLURM job submission failed: {str(task.result)}'
         else:

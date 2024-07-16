@@ -25,39 +25,13 @@ album_instance = Album.Builder().build()
 album_instance.load_or_create_collection()
 
 @celery_app.task(bind=True)
-def submit_slurm_job(self, catalog: str, group: str, name: str, version: str, gpus: int = 0, cpus: int = 24, memory: str = "125G", args: Optional[str] = None):
-    logger.info(f"Starting SLURM job submission for {catalog}:{group}:{name}:{version}")
+def submit_slurm_job(self, catalog: str, group: str, name: str, version: str, slurm_host: str, gpus: int = 0, cpus: int = 24, memory: str = "125G", args: str = None):
     job_name = f"{catalog}_{group}_{name}_{version}"
     
     args_str = args if args else ""
     album_command = f"album run {catalog}:{group}:{name}:{version} {args_str}"
     
-    metadata = {
-        'album_solution': f"{catalog}:{group}:{name}:{version}",
-        'args': args_str,
-        'submission_time': datetime.utcnow().isoformat()
-    }
-
-    logger.info(f"Preparing SLURM script for job: {job_name}")
-    if gpus > 0:
-        sbatch_script = f"""#!/bin/bash
-#SBATCH --job-name={job_name}
-#SBATCH --output={job_name}_%j.out
-#SBATCH --error={job_name}_%j.err
-#SBATCH --time=24:00:00
-#SBATCH --gpus={gpus}
-#SBATCH --partition=gpu
-#SBATCH --nodes=1
-#SBATCH --cpus-per-task={cpus}
-#SBATCH --ntasks-per-node=1
-#SBATCH --mem={memory}
-
-micromamba activate album-nexus
-
-{album_command}
-"""
-    else:
-        sbatch_script = f"""#!/bin/bash
+    sbatch_script = f"""#!/bin/bash
 #SBATCH --job-name={job_name}
 #SBATCH --output={job_name}_%j.out
 #SBATCH --error={job_name}_%j.err
@@ -66,83 +40,41 @@ micromamba activate album-nexus
 #SBATCH --cpus-per-task={cpus}
 #SBATCH --ntasks-per-node=1
 #SBATCH --mem={memory}
+{"#SBATCH --gpus=" + str(gpus) if gpus > 0 else ""}
 
 micromamba activate album-nexus
 
 {album_command}
 """
 
-    logger.info(f"SLURM script prepared:\n{sbatch_script}")
-
-    try:
-        logger.info("Attempting to connect to SSH tunnel")
-        ssh = paramiko.SSHClient()
-        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect('localhost', port=17017)
-        logger.info("Successfully connected to SSH tunnel")
-
-        logger.info("Creating temporary file on remote system")
-        stdin, stdout, stderr = ssh.exec_command('mktemp')
-        temp_script_path = stdout.read().strip().decode()
-        logger.info(f"Temporary file created: {temp_script_path}")
-
-        logger.info("Writing SLURM script to temporary file")
-        ssh.exec_command(f"cat > {temp_script_path} << EOL\n{sbatch_script}\nEOL")
-
-        logger.info(f"Submitting SLURM job: sbatch {temp_script_path}")
-        stdin, stdout, stderr = ssh.exec_command(f'sbatch {temp_script_path}')
-        job_id_output = stdout.read().decode().strip()
-        stderr_output = stderr.read().decode().strip()
-        
-        logger.info(f"SLURM submission output: {job_id_output}")
-        if stderr_output:
-            logger.error(f"SLURM submission error: {stderr_output}")
-        
-        if "Submitted batch job" not in job_id_output:
-            raise Exception(f"Failed to submit SLURM job: {stderr_output}\nScript: {sbatch_script}")
-        
-        job_id = job_id_output.split()[-1]
-        logger.info(f"SLURM job submitted successfully with job ID: {job_id}")
-        metadata['slurm_job_id'] = job_id
-        self.update_state(state=states.PENDING, meta=metadata)
-        logger.info(f"Scheduling job status check for job ID: {job_id}")
-        check_slurm_job_status.apply_async((self.request.id, job_id), countdown=60, kwargs={'metadata': metadata})
-        return metadata
-    except Exception as e:
-        logger.exception(f"Error submitting SLURM job: {str(e)}")
-        raise
-    finally:
-        if 'ssh' in locals():
-            logger.info("Closing SSH connection")
-            ssh.close()
+    result = subprocess.run(['python', 'slurm_handler.py', 'submit', slurm_host, sbatch_script], capture_output=True, text=True)
+    output = json.loads(result.stdout)
+    
+    if output['error']:
+        self.update_state(state=states.FAILURE, meta={'error': output['error']})
+        raise Exception(f"Failed to submit SLURM job: {output['error']}")
+    
+    job_id = output['job_id']
+    self.update_state(state=states.PENDING, meta={'job_id': job_id})
+    return {'job_id': job_id, 'slurm_host': slurm_host}
 
 @celery_app.task(bind=True)
-def check_slurm_job_status(self, celery_task_id: str, job_id: str, metadata: Optional[dict] = None):
-    print(f"Checking status for SLURM job ID: {job_id}")
+def check_slurm_job_status(self, job_id: str, slurm_host: str):
+    result = subprocess.run(['python', 'slurm_handler.py', 'status', slurm_host, job_id], capture_output=True, text=True)
+    output = json.loads(result.stdout)
     
-    ssh = paramiko.SSHClient()
-    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    ssh.connect('localhost', port=17017)
+    if output['error']:
+        self.update_state(state=states.FAILURE, meta={'error': output['error']})
+        raise Exception(f"Failed to check SLURM job status: {output['error']}")
     
-    stdin, stdout, stderr = ssh.exec_command(f'squeue --job {job_id} --noheader')
-    output = stdout.read().decode().strip()
+    status = output['status']
+    if status == "RUNNING":
+        self.update_state(state=states.STARTED, meta={'status': status})
+        check_slurm_job_status.apply_async((job_id, slurm_host), countdown=60)
+    elif status == "COMPLETED":
+        self.update_state(state=states.SUCCESS, meta={'status': status})
     
-    ssh.close()
-    
-    if metadata is None:
-        metadata = {}
-    
-    if not output:
-        print(f"SLURM job {job_id} completed or not found.")
-        metadata.update({'status': 'SLURM job completed', 'job_id': job_id})
-        celery_app.backend.store_result(celery_task_id, metadata, state=states.SUCCESS)
-        return metadata
-    else:
-        print(f"SLURM job {job_id} is still running.")
-        metadata.update({'slurm_job_id': job_id, 'status': 'running'})
-        self.update_state(state=states.STARTED, meta=metadata)
-        check_slurm_job_status.apply_async((celery_task_id, job_id), countdown=60, kwargs={'metadata': metadata})
-        return {'status': 'SLURM job running', 'job_id': job_id}
+    return {'status': status}
 
 @celery_app.task(bind=True)
 def run_album_solution(self, catalog, group, name, version, args_json):
