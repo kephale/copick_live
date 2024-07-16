@@ -7,7 +7,7 @@ from album.runner.core.model.coordinates import Coordinates
 from copick_live.components.run_solution import layout as run_solution_layout
 from copick_live.components.recently_executed import layout as recently_executed_layout
 from copick_live.components.album_index import layout as album_index_layout
-from copick_live.components.recently_executed import register_callbacks as register_recently_executed_callbacks
+# from copick_live.components.recently_executed import register_callbacks as register_recently_executed_callbacks
 
 from copick_live.callbacks.album_callbacks import *
 
