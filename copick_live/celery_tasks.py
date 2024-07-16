@@ -60,12 +60,12 @@ micromamba run -n album-nexus {album_command}
         
         if output.get('error'):
             raise Exception(f"Failed to submit SLURM job: {output['error']}")
-        
+
         job_id = output.get('job_id')
         if not job_id:
             raise Exception(f"No job ID returned from slurm_handler.py. Output was: {output}")
-        
-        self.update_state(state=states.SUCCESS, meta={'job_id': job_id})
+
+        self.update_state(state=states.SUCCESS, meta={'job_id': job_id, 'slurm_host': slurm_host})
         return {'job_id': job_id, 'slurm_host': slurm_host}
     
     except Exception as e:
@@ -81,6 +81,11 @@ micromamba run -n album-nexus {album_command}
 @celery_app.task(bind=True)
 def check_slurm_job_status(self, job_id: str, slurm_host: str):
     logger.info(f"Checking status for job_id: {job_id}, slurm_host: {slurm_host}")
+    
+    if not job_id or not slurm_host:
+        logger.error(f"Invalid arguments: job_id={job_id}, slurm_host={slurm_host}")
+        return None, "Invalid arguments: Missing job_id or slurm_host"
+
     try:
         result = subprocess.run(['python', 'slurm_handler.py', 'status', slurm_host, job_id], capture_output=True, text=True)
         
