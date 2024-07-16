@@ -5,11 +5,11 @@ from copick_live.utils.album_utils import get_recently_executed_solutions
 
 def create_solution_card(solution):
     return dbc.Card([
-        dbc.CardHeader(f"{solution.name} - {solution.version}"),
+        dbc.CardHeader(f"{solution.setup()['name']} - {solution.setup()['version']}"),
         dbc.CardBody([
-            html.H5(solution.group, className="card-title"),
-            html.P(solution.description, className="card-text"),
-            dbc.Button("Run Again", href=f"/run-solution/{solution.catalog}/{solution.group}/{solution.name}/{solution.version}", color="primary"),
+            html.H5(solution.setup()['group'], className="card-title"),
+            html.P(solution.setup()['description'], className="card-text"),
+            dbc.Button("Run Again", href=f"/run-solution/{solution.catalog()}/{solution.setup()['group']}/{solution.setup()['name']}/{solution.setup()['version']}", color="primary"),
         ]),
     ], className="mb-3")
 

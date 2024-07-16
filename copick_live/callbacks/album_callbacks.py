@@ -24,19 +24,19 @@ def run_solution(n_clicks, catalog, group, name, version, arg_values, arg_ids):
             html.Div(f"Solution started with task ID: {task.id}"),
             dcc.Interval(id='solution-output-interval', interval=1000, n_intervals=0),
             html.Div(id='solution-output'),
-            dcc.Store(id='task-id-store', data=task.id)  # Store the task ID
+            dcc.Store(id='task-id-store', data=str(task.id))  # Ensure task.id is stored as a string
         ])
     return ""
 
 @callback(
     Output("solution-output", "children"),
     Input("solution-output-interval", "n_intervals"),
-    State("task-id-store", "data"),  # Get the task ID from the dcc.Store
+    State("task-id-store", "data"),
     prevent_initial_call=True
 )
 def update_solution_output(n_intervals, task_id):
     if task_id:
-        task = run_album_solution.AsyncResult(task_id)
+        task = run_album_solution.AsyncResult(str(task_id))
         if task.state == 'PENDING':
             return 'Task is pending...'
         elif task.state != 'FAILURE':
