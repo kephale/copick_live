@@ -83,21 +83,38 @@ micromamba activate album-nexus
 
 @celery_app.task(bind=True)
 def check_slurm_job_status(self, job_id: str, slurm_host: str):
-    result = subprocess.run(['python', 'slurm_handler.py', 'status', slurm_host, job_id], capture_output=True, text=True)
-    output = json.loads(result.stdout)
-    
-    if output['error']:
-        self.update_state(state=states.FAILURE, meta={'error': output['error']})
-        raise Exception(f"Failed to check SLURM job status: {output['error']}")
-    
-    status = output['status']
-    if status == "RUNNING":
-        self.update_state(state=states.STARTED, meta={'status': status})
-        check_slurm_job_status.apply_async((job_id, slurm_host), countdown=60)
-    elif status == "COMPLETED":
-        self.update_state(state=states.SUCCESS, meta={'status': status})
-    
-    return {'status': status}
+    try:
+        result = subprocess.run(['python', 'slurm_handler.py', 'status', slurm_host, job_id], capture_output=True, text=True)
+        
+        try:
+            output = json.loads(result.stdout)
+        except json.JSONDecodeError as e:
+            raise Exception(f"Failed to parse JSON output from slurm_handler.py: {str(e)}. Output was: {result.stdout}")
+        
+        if 'error' in output and output['error']:
+            raise Exception(f"Failed to check SLURM job status: {output['error']}")
+        
+        status = output.get('status')
+        if not status:
+            raise Exception(f"No status returned from slurm_handler.py. Output was: {output}")
+        
+        if status == "RUNNING":
+            self.update_state(state=states.STARTED, meta={'status': status})
+            check_slurm_job_status.apply_async((job_id, slurm_host), countdown=60)
+        elif status == "COMPLETED":
+            self.update_state(state=states.SUCCESS, meta={'status': status})
+        
+        return {'status': status}
+
+    except Exception as e:
+        logging.exception("Error in check_slurm_job_status task")
+        self.update_state(state=states.FAILURE, meta={
+            'exc_type': type(e).__name__,
+            'exc_message': str(e),
+            'exc_args': e.args
+        })
+        raise
+
 
 @celery_app.task(bind=True)
 def run_album_solution(self, catalog, group, name, version, args_json):
@@ -108,15 +125,20 @@ def run_album_solution(self, catalog, group, name, version, args_json):
         args_list.extend([f"--{key}", value])
     
     output = io.StringIO()
-    with redirect_stdout(output), redirect_stderr(output):
-        try:
+    try:
+        with redirect_stdout(output), redirect_stderr(output):
             result = run_solution(catalog, group, name, version, args_list)
-            logger.info(f"Task completed successfully. Output: {output.getvalue()}")
-        except Exception as e:
-            logger.error(f"Task failed with error: {str(e)}")
-            raise
-    
-    return {"output": output.getvalue(), "result": result}
+        logger.info(f"Task completed successfully. Output: {output.getvalue()}")
+        return {"output": output.getvalue(), "result": result}
+    except Exception as e:
+        logger.error(f"Task failed with error: {str(e)}")
+        self.update_state(state=states.FAILURE, meta={
+            'exc_type': type(e).__name__,
+            'exc_message': str(e),
+            'exc_args': e.args
+        })
+        raise
+
 
 @celery_app.task
 def install_album_solution(catalog, group, name, version):
