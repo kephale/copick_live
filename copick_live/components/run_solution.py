@@ -172,20 +172,26 @@ def submit_slurm(n_clicks, catalog, group, name, version, slurm_host, arg_values
 )
 def update_slurm_status(n_intervals, task_id):
     if task_id:
-        task = submit_slurm_job.AsyncResult(str(task_id))
-        logger.info(f"SLURM submission task {task_id} state: {task.state}")
+        task = check_slurm_job_status.AsyncResult(str(task_id))
+        logger.info(f"SLURM status task {task_id} state: {task.state}")
         if task.state == 'PENDING':
-            return 'SLURM job submission is pending...'
+            return 'Checking SLURM job status...'
         elif task.state == 'STARTED':
-            return 'SLURM job is running...'
+            status = task.info.get('status', 'Unknown')
+            return f'SLURM job status: {status}'
         elif task.state == 'SUCCESS':
-            result = task.result
-            job_id = result.get('job_id')
-            slurm_host = result.get('slurm_host')
-            check_slurm_job_status.delay(job_id, slurm_host)
-            return f"SLURM job submitted successfully. Job ID: {job_id}"
+            status = task.result.get('status', 'Unknown')
+            output = task.result.get('output', '')
+            if status == "COMPLETED":
+                return html.Div([
+                    html.P(f"SLURM job completed"),
+                    html.H4("Job Output:"),
+                    html.Pre(output)
+                ])
+            else:
+                return f'SLURM job status: {status}'
         elif task.state == 'FAILURE':
-            return f'SLURM job submission failed: {str(task.result)}'
+            return f'Failed to check SLURM job status: {str(task.result)}'
         else:
-            return f'Unknown SLURM submission task state: {task.state}'
+            return f'Unknown task state: {task.state}'
     return ''

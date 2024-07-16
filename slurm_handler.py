@@ -61,6 +61,12 @@ def check_job_status(slurm_host, job_id):
     else:
         return "COMPLETED", None
 
+def get_job_output(slurm_host, job_id):
+    stdout, stderr = run_ssh_command(slurm_host, f"cat slurm-{job_id}.out")
+    if stderr:
+        return None, f"Error retrieving job output: {stderr}"
+    return stdout, None
+    
 if __name__ == "__main__":
     script_path = os.path.abspath(__file__)
     logging.info(f"Script path: {script_path}")
@@ -87,6 +93,13 @@ if __name__ == "__main__":
         job_id = sys.argv[3]
         status, error = check_job_status(slurm_host, job_id)
         print(json.dumps({"status": status, "error": error}))
+    elif action == "output":
+        if len(sys.argv) < 4:
+            print(json.dumps({"error": "Missing job ID"}))
+            sys.exit(1)
+        job_id = sys.argv[3]
+        output, error = get_job_output(slurm_host, job_id)
+        print(json.dumps({"output": output, "error": error}))        
     else:
         print(json.dumps({"error": f"Unknown action: {action}"}))
         sys.exit(1)
