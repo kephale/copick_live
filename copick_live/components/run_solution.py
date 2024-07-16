@@ -40,14 +40,20 @@ def layout():
             dbc.Row([
                 dbc.Col([
                     html.Div(id="run-solution-output", className="mt-3"),
-                ], width=6),
+                ], width=12),
+            ]),
+            dbc.Row([
                 dbc.Col([
                     html.Div(id="submit-slurm-output", className="mt-3"),
-                ], width=6),
+                ], width=12),
+            ]),
+            dbc.Row([
                 dbc.Col([
                     html.Div(id="solution-output"),
-                ], width=6),
+                ], width=12),
             ]),
+            dcc.Store(id='task-id-store'),
+            dcc.Interval(id='solution-output-interval', interval=1000, n_intervals=0, disabled=True),
         ]),
     ])
 
