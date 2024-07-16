@@ -47,7 +47,6 @@ def layout():
                 dbc.Col([
                     html.Div(id="solution-output"),
                 ], width=6),
-        ]),
             ]),
         ]),
     ])
