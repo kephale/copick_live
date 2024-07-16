@@ -2,6 +2,14 @@ import dash_bootstrap_components as dbc
 from dash import Dash, html, dcc
 from collections import defaultdict
 
+from album.api import Album
+from album.runner.core.model.coordinates import Coordinates
+from copick_live.components.album_index import layout as album_index
+from copick_live.components.run_solution import layout as run_solution
+from copick_live.components.recently_executed import layout as recently_executed_layout, register_callbacks as register_recently_executed_callbacks
+
+from copick_live.callbacks.album_callbacks import *
+
 from copick_live.callbacks.update_res import *
 from copick_live.components.header import layout as header
 from copick_live.components.progress import layout as tomo_progress
@@ -22,6 +30,10 @@ def create_app():
 
     app = Dash(__name__, external_stylesheets=external_stylesheets)
 
+    # Initialize Album
+    album_instance = Album.Builder().build()
+    album_instance.load_or_create_collection()
+    
     browser_cache = html.Div(
         id="no-display",
         children=[
@@ -44,7 +56,8 @@ def create_app():
                 [
                     dbc.Row(
                         [
-                            dbc.Col([tomo_progress(), unlabelled_tomos()], width=3),
+                            # dbc.Col([tomo_progress(), unlabelled_tomos()], width=3),
+                            dbc.Col([album_index(album_instance), run_solution(album_instance), recently_executed_layout(album_instance)], width=3),
                             dbc.Col(ranking(), width=3),
                             dbc.Col(composition(), width=3),
                             dbc.Col(protein_sts(), width=3),
@@ -58,6 +71,8 @@ def create_app():
             html.Div(browser_cache),
         ],
     )
+    register_recently_executed_callbacks(app, album_instance)
+    
     return app
 
 

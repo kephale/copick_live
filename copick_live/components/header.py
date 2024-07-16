@@ -43,7 +43,10 @@ def layout():
                                         #html.P("Pickathon Live Updates"),
                                     ],
                                     id="app-title",
-                                )
+                                ),
+                                dbc.NavItem(dbc.NavLink("Album Index", href="/album-index")),
+                                dbc.NavItem(dbc.NavLink("Run Solution", href="/run-solution")),
+                                dbc.NavItem(dbc.NavLink("Recently Executed", href="/recently-executed")),
                             ],
                             md=True,
                             align="center",
