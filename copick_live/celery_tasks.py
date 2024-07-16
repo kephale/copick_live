@@ -42,9 +42,10 @@ def submit_slurm_job(self, catalog: str, group: str, name: str, version: str, sl
 #SBATCH --mem={memory}
 {"#SBATCH --gpus=" + str(gpus) if gpus > 0 else ""}
 
-micromamba activate album-nexus
+# micromamba activate album-nexus
+# {album_command}
 
-{album_command}
+micromamba run -n album-nexus {album_command}    
 """
 
     try:
