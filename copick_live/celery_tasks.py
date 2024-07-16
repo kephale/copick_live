@@ -48,14 +48,37 @@ micromamba activate album-nexus
 """
 
     result = subprocess.run(['python', 'slurm_handler.py', 'submit', slurm_host, sbatch_script], capture_output=True, text=True)
-    output = json.loads(result.stdout)
     
-    if output['error']:
+    self.update_state(state=states.STARTED, meta={'stdout': result.stdout, 'stderr': result.stderr})
+    
+    if result.returncode != 0:
+        error_message = f"slurm_handler.py failed with return code {result.returncode}. Stderr: {result.stderr}"
+        self.update_state(state=states.FAILURE, meta={'error': error_message})
+        raise Exception(error_message)
+    
+    if not result.stdout.strip():
+        error_message = "slurm_handler.py produced no output"
+        self.update_state(state=states.FAILURE, meta={'error': error_message})
+        raise Exception(error_message)
+    
+    try:
+        output = json.loads(result.stdout)
+    except json.JSONDecodeError as e:
+        error_message = f"Failed to parse JSON output from slurm_handler.py: {str(e)}. Output was: {result.stdout}"
+        self.update_state(state=states.FAILURE, meta={'error': error_message})
+        raise Exception(error_message)
+    
+    if output.get('error'):
         self.update_state(state=states.FAILURE, meta={'error': output['error']})
         raise Exception(f"Failed to submit SLURM job: {output['error']}")
     
-    job_id = output['job_id']
-    self.update_state(state=states.PENDING, meta={'job_id': job_id})
+    job_id = output.get('job_id')
+    if not job_id:
+        error_message = f"No job ID returned from slurm_handler.py. Output was: {output}"
+        self.update_state(state=states.FAILURE, meta={'error': error_message})
+        raise Exception(error_message)
+    
+    self.update_state(state=states.SUCCESS, meta={'job_id': job_id})
     return {'job_id': job_id, 'slurm_host': slurm_host}
 
 @celery_app.task(bind=True)
