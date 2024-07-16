@@ -46,30 +46,33 @@ def layout(album_instance):
                 ], width=6),
             ]),
         ]),
+        dcc.Store(id='album-index', data=album_instance.get_index_as_dict())
     ])
 
 @callback(
     Output("group-input", "options"),
-    Input("catalog-input", "value")
+    Input("catalog-input", "value"),
+    State('album-index', 'data')
 )
-def update_groups(catalog):
+def update_groups(catalog, index_data):
     if not catalog:
         return []
     groups = set()
-    for solution in next(cat for cat in album_instance.get_index_as_dict()['catalogs'] if cat['name'] == catalog)['solutions']:
+    for solution in next(cat for cat in index_data['catalogs'] if cat['name'] == catalog)['solutions']:
         groups.add(solution['setup']['group'])
     return [{'label': group, 'value': group} for group in groups]
 
 @callback(
     Output("name-input", "options"),
     Input("catalog-input", "value"),
-    Input("group-input", "value")
+    Input("group-input", "value"),
+    State('album-index', 'data')
 )
-def update_names(catalog, group):
+def update_names(catalog, group, index_data):
     if not catalog or not group:
         return []
     names = set()
-    for solution in next(cat for cat in album_instance.get_index_as_dict()['catalogs'] if cat['name'] == catalog)['solutions']:
+    for solution in next(cat for cat in index_data['catalogs'] if cat['name'] == catalog)['solutions']:
         if solution['setup']['group'] == group:
             names.add(solution['setup']['name'])
     return [{'label': name, 'value': name} for name in names]
@@ -78,13 +81,14 @@ def update_names(catalog, group):
     Output("version-input", "options"),
     Input("catalog-input", "value"),
     Input("group-input", "value"),
-    Input("name-input", "value")
+    Input("name-input", "value"),
+    State('album-index', 'data')
 )
-def update_versions(catalog, group, name):
+def update_versions(catalog, group, name, index_data):
     if not catalog or not group or not name:
         return []
     versions = []
-    for solution in next(cat for cat in album_instance.get_index_as_dict()['catalogs'] if cat['name'] == catalog)['solutions']:
+    for solution in next(cat for cat in index_data['catalogs'] if cat['name'] == catalog)['solutions']:
         if solution['setup']['group'] == group and solution['setup']['name'] == name:
             versions.append(solution['setup']['version'])
     return [{'label': version, 'value': version} for version in versions]
@@ -94,12 +98,13 @@ def update_versions(catalog, group, name):
     Input("catalog-input", "value"),
     Input("group-input", "value"),
     Input("name-input", "value"),
-    Input("version-input", "value")
+    Input("version-input", "value"),
+    State('album-index', 'data')
 )
-def update_dynamic_args(catalog, group, name, version):
+def update_dynamic_args(catalog, group, name, version, index_data):
     if not catalog or not group or not name or not version:
         return []
-    solution = next((sol for sol in next(cat for cat in album_instance.get_index_as_dict()['catalogs'] if cat['name'] == catalog)['solutions']
+    solution = next((sol for sol in next(cat for cat in index_data['catalogs'] if cat['name'] == catalog)['solutions']
                      if sol['setup']['group'] == group and sol['setup']['name'] == name and sol['setup']['version'] == version), None)
     if not solution:
         return []
@@ -109,7 +114,7 @@ def update_dynamic_args(catalog, group, name, version):
         arg_inputs.append(dbc.Row([
             dbc.Col([
                 dbc.Label(f"{arg['name']} ({arg['type']}){'*' if arg.get('required') else ''}"),
-                dcc.Input(id=f"arg-{arg['name']}", type="text", placeholder=arg.get('default', ''), className="form-control")
+                dcc.Input(id={'type': 'arg-input', 'index': arg['name']}, type="text", placeholder=arg.get('default', ''), className="form-control")
             ], width=12)
         ]))
     return arg_inputs
