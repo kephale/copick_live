@@ -40,10 +40,6 @@ def layout():
                 dbc.Col([
                     dbc.Button("Run Solution", id="run-solution-button", color="primary", className="mt-3"),
                 ], width=6),
-                dbc.Col([
-                    dbc.Button("Submit SLURM Job", id="submit-slurm-button", color="secondary", className="mt-3"),
-                    html.Div(id="submit-slurm-output", className="mt-3"),
-                ], width=6),
             ]),
             dbc.Row([
                 dbc.Col([
@@ -52,6 +48,7 @@ def layout():
             ]),
             dbc.Row([
                 dbc.Col([
+                    dbc.Button("Submit SLURM Job", id="submit-slurm-button", color="secondary", className="mt-3"),
                     html.Div(id="submit-slurm-output", className="mt-3"),
                 ], width=12),
             ]),
