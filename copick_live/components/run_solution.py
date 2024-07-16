@@ -44,6 +44,10 @@ def layout():
                 dbc.Col([
                     html.Div(id="submit-slurm-output", className="mt-3"),
                 ], width=6),
+                dbc.Col([
+                    html.Div(id="solution-output"),
+                ], width=6),
+        ]),
             ]),
         ]),
     ])

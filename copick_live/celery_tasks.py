@@ -1,3 +1,6 @@
+import io
+import sys
+from contextlib import redirect_stdout, redirect_stderr
 import json
 import os
 import tempfile
@@ -109,7 +112,11 @@ def run_album_solution(catalog, group, name, version, args_json):
     for key, value in args_dict.items():
         args_list.extend([f"--{key}", value])
     
-    return run_solution(catalog, group, name, version, args_list)
+    output = io.StringIO()
+    with redirect_stdout(output), redirect_stderr(output):
+        result = run_solution(catalog, group, name, version, args_list)
+    
+    return {"output": output.getvalue(), "result": result}
 
 @celery_app.task
 def install_album_solution(catalog, group, name, version):
