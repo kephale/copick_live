@@ -13,8 +13,10 @@ from album.runner.core.model.coordinates import Coordinates
 from datetime import datetime
 from copick_live.utils.album_utils import run_solution, install_solution, uninstall_solution, test_solution
 
+import logging
+from celery.utils.log import get_task_logger
 
-from celery import Celery
+logger = get_task_logger(__name__)
 
 celery_app = Celery('album_server', broker='redis://localhost:6379/0', backend='redis://localhost:6379/0')
 
@@ -105,8 +107,9 @@ def check_slurm_job_status(self, celery_task_id: str, job_id: str, metadata: Opt
         check_slurm_job_status.apply_async((celery_task_id, job_id), countdown=60, kwargs={'metadata': metadata})
         return {'status': 'SLURM job running', 'job_id': job_id}
 
-@celery_app.task
-def run_album_solution(catalog, group, name, version, args_json):
+@celery_app.task(bind=True)
+def run_album_solution(self, catalog, group, name, version, args_json):
+    logger.info(f"Starting task for solution: {catalog}:{group}:{name}:{version}")
     args_dict = json.loads(args_json)
     args_list = [""]
     for key, value in args_dict.items():
@@ -114,7 +117,12 @@ def run_album_solution(catalog, group, name, version, args_json):
     
     output = io.StringIO()
     with redirect_stdout(output), redirect_stderr(output):
-        result = run_solution(catalog, group, name, version, args_list)
+        try:
+            result = run_solution(catalog, group, name, version, args_list)
+            logger.info(f"Task completed successfully. Output: {output.getvalue()}")
+        except Exception as e:
+            logger.error(f"Task failed with error: {str(e)}")
+            raise
     
     return {"output": output.getvalue(), "result": result}
 

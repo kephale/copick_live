@@ -1,3 +1,8 @@
+import logging
+from celery.utils.log import get_task_logger
+
+logger = get_task_logger(__name__)
+
 from dash import Input, Output, State, callback, ALL, dcc, html
 from copick_live.celery_tasks import run_album_solution, submit_slurm_job
 import json
@@ -37,13 +42,18 @@ def run_solution(n_clicks, catalog, group, name, version, arg_values, arg_ids):
 def update_solution_output(n_intervals, task_id):
     if task_id:
         task = run_album_solution.AsyncResult(str(task_id))
+        logger.info(f"Task {task_id} state: {task.state}")
         if task.state == 'PENDING':
-            return 'Task is pending...'
-        elif task.state != 'FAILURE':
+            return 'Task is pending... This could mean the task is waiting to be picked up by a worker.'
+        elif task.state == 'STARTED':
+            return 'Task has been started and is currently running...'
+        elif task.state == 'SUCCESS':
             if task.result:
                 return html.Pre(task.result['output'])
             else:
-                return 'Task is in progress...'
-        else:
+                return 'Task completed successfully, but no output was returned.'
+        elif task.state == 'FAILURE':
             return f'Task failed: {str(task.result)}'
+        else:
+            return f'Unknown task state: {task.state}'
     return ''

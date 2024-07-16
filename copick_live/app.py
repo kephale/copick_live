@@ -1,3 +1,4 @@
+import logging
 import dash_bootstrap_components as dbc
 from dash import Dash, html, dcc
 from collections import defaultdict
@@ -22,6 +23,14 @@ from copick_live.components.popups import layout as popups
 
 
 def create_app():
+    # Configure logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    
     external_stylesheets = [
         dbc.themes.BOOTSTRAP,
         "assets/header-style.css",
