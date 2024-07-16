@@ -182,7 +182,7 @@ def update_slurm_status(n_intervals, task_id):
         elif task.state == 'SUCCESS':
             status = task.result.get('status', 'Unknown')
             output = task.result.get('output', '')
-            if status == "COMPLETED":
+            if status == "COMPLETED" or status == 'SUCCESS':
                 return html.Div([
                     html.P(f"SLURM job completed"),
                     html.H4("Job Output:"),
