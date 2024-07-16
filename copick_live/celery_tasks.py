@@ -73,9 +73,13 @@ micromamba activate album-nexus
     
     except Exception as e:
         logging.exception("Error in submit_slurm_job task")
-        self.update_state(state=states.FAILURE, meta={'exc_type': type(e).__name__, 'exc_message': str(e)})
+        self.update_state(state=states.FAILURE, meta={
+            'exc_type': type(e).__name__,
+            'exc_message': str(e),
+            'exc_args': e.args
+        })
         raise
-    
+
 
 @celery_app.task(bind=True)
 def check_slurm_job_status(self, job_id: str, slurm_host: str):
