@@ -101,10 +101,7 @@ def check_slurm_job_status(self, job_id: str, slurm_host: str):
         if not status:
             raise Exception(f"No status returned from slurm_handler.py. Output was: {output}")
         
-        if status == "RUNNING":
-            self.update_state(state=states.STARTED, meta={'status': status})
-            check_slurm_job_status.apply_async((job_id, slurm_host), countdown=60)
-        elif status == "COMPLETED":
+        if status == "COMPLETED":
             # Fetch job output
             output_result = subprocess.run(['python', 'slurm_handler.py', 'output', slurm_host, job_id], capture_output=True, text=True)
             try:
@@ -112,12 +109,11 @@ def check_slurm_job_status(self, job_id: str, slurm_host: str):
             except json.JSONDecodeError:
                 output_data = {'output': 'Failed to retrieve job output'}
             
-            self.update_state(state=states.SUCCESS, meta={'status': status, 'output': output_data.get('output', '')})
+            return {'status': status, 'output': output_data.get('output', '')}
         else:
             self.update_state(state=states.STARTED, meta={'status': status})
             check_slurm_job_status.apply_async((job_id, slurm_host), countdown=60)
-        
-        return {'status': status, 'output': output_data.get('output', '') if status == "COMPLETED" else ''}
+            return {'status': status}
 
     except Exception as e:
         logging.exception("Error in check_slurm_job_status task")

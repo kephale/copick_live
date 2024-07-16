@@ -172,17 +172,57 @@ def submit_slurm(n_clicks, catalog, group, name, version, slurm_host, arg_values
 )
 def update_slurm_status(n_intervals, task_id):
     if task_id:
-        task = check_slurm_job_status.AsyncResult(str(task_id))
-        logger.info(f"SLURM status task {task_id} state: {task.state}")
+        task = submit_slurm_job.AsyncResult(str(task_id))
+        logger.info(f"SLURM submission task {task_id} state: {task.state}")
+        
         if task.state == 'PENDING':
-            return 'Checking SLURM job status...'
+            return 'SLURM job submission is pending...'
         elif task.state == 'STARTED':
-            status = task.info.get('status', 'Unknown')
-            return f'SLURM job status: {status}'
+            return 'SLURM job is being submitted...'
         elif task.state == 'SUCCESS':
-            status = task.result.get('status', 'Unknown')
-            output = task.result.get('output', '')
-            if status == "COMPLETED" or status == 'SUCCESS':
+            result = task.result
+            job_id = result.get('job_id')
+            slurm_host = result.get('slurm_host')
+            
+            if job_id and slurm_host:
+                # Initiate status checking
+                status_task = check_slurm_job_status.delay(job_id, slurm_host)
+                return dcc.Loading(id="loading-job-status", children=[
+                    html.Div(f"SLURM job submitted successfully. Job ID: {job_id}"),
+                    dcc.Interval(id='job-status-interval', interval=5000, n_intervals=0),
+                    html.Div(id='job-status-output'),
+                    dcc.Store(id='job-status-task-id', data=str(status_task.id))
+                ])
+            else:
+                return f"Error: Invalid job submission result. Job ID: {job_id}, SLURM host: {slurm_host}"
+        elif task.state == 'FAILURE':
+            return f'SLURM job submission failed: {str(task.result)}'
+        else:
+            return f'Unknown SLURM submission task state: {task.state}'
+    return ''
+
+@callback(
+    Output("job-status-output", "children"),
+    Input("job-status-interval", "n_intervals"),
+    State("job-status-task-id", "data"),
+    prevent_initial_call=True
+)
+def update_job_status(n_intervals, status_task_id):
+    if status_task_id:
+        status_task = check_slurm_job_status.AsyncResult(str(status_task_id))
+        logger.info(f"SLURM status task {status_task_id} state: {status_task.state}")
+        
+        if status_task.state == 'PENDING':
+            return 'Checking SLURM job status...'
+        elif status_task.state == 'STARTED':
+            status = status_task.info.get('status', 'Unknown')
+            return f'SLURM job status: {status}'
+        elif status_task.state == 'SUCCESS':
+            result = status_task.result
+            status = result.get('status', 'Unknown')
+            output = result.get('output', '')
+            
+            if status == "COMPLETED":
                 return html.Div([
                     html.P(f"SLURM job completed"),
                     html.H4("Job Output:"),
@@ -190,8 +230,8 @@ def update_slurm_status(n_intervals, task_id):
                 ])
             else:
                 return f'SLURM job status: {status}'
-        elif task.state == 'FAILURE':
-            return f'Failed to check SLURM job status: {str(task.result)}'
+        elif status_task.state == 'FAILURE':
+            return f'Failed to check SLURM job status: {str(status_task.result)}'
         else:
-            return f'Unknown task state: {task.state}'
+            return f'Unknown task state: {status_task.state}'
     return ''
