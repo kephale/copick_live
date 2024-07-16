@@ -26,6 +26,7 @@ album_instance.load_or_create_collection()
 
 @celery_app.task(bind=True)
 def submit_slurm_job(self, catalog: str, group: str, name: str, version: str, gpus: int = 0, cpus: int = 24, memory: str = "125G", args: Optional[str] = None):
+    logger.info(f"Starting SLURM job submission for {catalog}:{group}:{name}:{version}")
     job_name = f"{catalog}_{group}_{name}_{version}"
     
     args_str = args if args else ""
@@ -37,6 +38,7 @@ def submit_slurm_job(self, catalog: str, group: str, name: str, version: str, gp
         'submission_time': datetime.utcnow().isoformat()
     }
 
+    logger.info(f"Preparing SLURM script for job: {job_name}")
     if gpus > 0:
         sbatch_script = f"""#!/bin/bash
 #SBATCH --job-name={job_name}
@@ -70,36 +72,48 @@ micromamba activate album-nexus
 {album_command}
 """
 
+    logger.info(f"SLURM script prepared:\n{sbatch_script}")
+
     try:
-        # Connect to the SSH tunnel
+        logger.info("Attempting to connect to SSH tunnel")
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         ssh.connect('localhost', port=17017)
+        logger.info("Successfully connected to SSH tunnel")
 
-        # Create a temporary file on the remote system
+        logger.info("Creating temporary file on remote system")
         stdin, stdout, stderr = ssh.exec_command('mktemp')
         temp_script_path = stdout.read().strip().decode()
+        logger.info(f"Temporary file created: {temp_script_path}")
 
-        # Write the SLURM script to the temporary file
+        logger.info("Writing SLURM script to temporary file")
         ssh.exec_command(f"cat > {temp_script_path} << EOL\n{sbatch_script}\nEOL")
 
-        # Submit the SLURM job
+        logger.info(f"Submitting SLURM job: sbatch {temp_script_path}")
         stdin, stdout, stderr = ssh.exec_command(f'sbatch {temp_script_path}')
         job_id_output = stdout.read().decode().strip()
+        stderr_output = stderr.read().decode().strip()
+        
+        logger.info(f"SLURM submission output: {job_id_output}")
+        if stderr_output:
+            logger.error(f"SLURM submission error: {stderr_output}")
         
         if "Submitted batch job" not in job_id_output:
-            raise Exception(f"Failed to submit SLURM job: {stderr.read().decode()}\nScript: {sbatch_script}")
+            raise Exception(f"Failed to submit SLURM job: {stderr_output}\nScript: {sbatch_script}")
         
         job_id = job_id_output.split()[-1]
-        print(f"SLURM job submitted with job ID: {job_id}")
+        logger.info(f"SLURM job submitted successfully with job ID: {job_id}")
         metadata['slurm_job_id'] = job_id
         self.update_state(state=states.PENDING, meta=metadata)
+        logger.info(f"Scheduling job status check for job ID: {job_id}")
         check_slurm_job_status.apply_async((self.request.id, job_id), countdown=60, kwargs={'metadata': metadata})
         return metadata
     except Exception as e:
-        raise Exception(f"Error submitting SLURM job: {str(e)}")
+        logger.exception(f"Error submitting SLURM job: {str(e)}")
+        raise
     finally:
         if 'ssh' in locals():
+            logger.info("Closing SSH connection")
             ssh.close()
 
 @celery_app.task(bind=True)

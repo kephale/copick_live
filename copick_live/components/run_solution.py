@@ -1,6 +1,13 @@
+import json
 import dash_bootstrap_components as dbc
-from dash import html, dcc, callback, Input, Output, State
+from dash import html, dcc, callback, Input, Output, State, ALL
 from copick_live.utils.album_utils import get_catalogs, get_groups, get_names, get_versions, get_solution_args
+from copick_live.celery_tasks import submit_slurm_job
+
+import logging
+from celery.utils.log import get_task_logger
+
+logger = get_task_logger(__name__)
 
 def layout():
     catalogs = get_catalogs()
@@ -35,6 +42,7 @@ def layout():
                 ], width=6),
                 dbc.Col([
                     dbc.Button("Submit SLURM Job", id="submit-slurm-button", color="secondary", className="mt-3"),
+                    html.Div(id="submit-slurm-output", className="mt-3"),
                 ], width=6),
             ]),
             dbc.Row([
@@ -112,3 +120,56 @@ def update_dynamic_args(catalog, group, name, version):
             ], width=12)
         ]))
     return arg_inputs
+
+@callback(
+    Output("submit-slurm-output", "children"),
+    Input("submit-slurm-button", "n_clicks"),
+    State("catalog-input", "value"),
+    State("group-input", "value"),
+    State("name-input", "value"),
+    State("version-input", "value"),
+    State({"type": "arg-input", "index": ALL}, "value"),
+    State({"type": "arg-input", "index": ALL}, "id"),
+    prevent_initial_call=True
+)
+def submit_slurm(n_clicks, catalog, group, name, version, arg_values, arg_ids):
+    if n_clicks:
+        args = {}
+        for arg_id, arg_value in zip(arg_ids, arg_values):
+            if arg_value:
+                args[arg_id['index']] = arg_value
+        
+        logger.info(f"Submitting SLURM job for {catalog}:{group}:{name}:{version}")
+        task = submit_slurm_job.delay(catalog, group, name, version, args=json.dumps(args))
+        return dcc.Loading(id="loading-submit-slurm", children=[
+            html.Div(f"SLURM job submission started with task ID: {task.id}"),
+            dcc.Interval(id='slurm-output-interval', interval=1000, n_intervals=0),
+            html.Div(id='slurm-status-output'),
+            dcc.Store(id='slurm-task-id-store', data=str(task.id))
+        ])
+    return ""
+
+@callback(
+    Output("slurm-status-output", "children"),
+    Input("slurm-output-interval", "n_intervals"),
+    State("slurm-task-id-store", "data"),
+    prevent_initial_call=True
+)
+def update_slurm_status(n_intervals, task_id):
+    if task_id:
+        task = submit_slurm_job.AsyncResult(str(task_id))
+        logger.info(f"SLURM submission task {task_id} state: {task.state}")
+        if task.state == 'PENDING':
+            return 'SLURM job submission is pending...'
+        elif task.state == 'STARTED':
+            return 'SLURM job submission is in progress...'
+        elif task.state == 'SUCCESS':
+            if task.result:
+                return f"SLURM job submitted successfully. Job ID: {task.result.get('slurm_job_id', 'Unknown')}"
+            else:
+                return 'SLURM job submission completed, but no job ID was returned.'
+        elif task.state == 'FAILURE':
+            return f'SLURM job submission failed: {str(task.result)}'
+        else:
+            return f'Unknown SLURM submission task state: {task.state}'
+    return ''
