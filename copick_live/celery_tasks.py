@@ -80,6 +80,7 @@ micromamba run -n album-nexus {album_command}
 
 @celery_app.task(bind=True)
 def check_slurm_job_status(self, job_id: str, slurm_host: str):
+    logger.info(f"Checking status for job_id: {job_id}, slurm_host: {slurm_host}")
     try:
         result = subprocess.run(['python', 'slurm_handler.py', 'status', slurm_host, job_id], capture_output=True, text=True)
         
