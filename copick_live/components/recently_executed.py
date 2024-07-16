@@ -30,4 +30,4 @@ def layout():
 )
 def refresh_recent_solutions(n_clicks, n_intervals):
     solutions = get_recently_executed_solutions()
-    return [create_solution_card(solution) for solution in solutions]
+    return [create_solution_card(solution) for solution in solutions][::-1]
