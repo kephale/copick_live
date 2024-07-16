@@ -14,16 +14,25 @@ def run_ssh_command(slurm_host, command):
     logging.debug(f"SSH command result - stdout: {result.stdout}, stderr: {result.stderr}")
     return result.stdout, result.stderr
 
+
 def submit_job(slurm_host, sbatch_script):
     logging.debug(f"Submitting job to {slurm_host}")
+    logging.debug(f"Sbatch script content:\n{sbatch_script}")
+    
     with open('temp_sbatch_script.sh', 'w') as f:
         f.write(sbatch_script)
     logging.debug("Wrote sbatch script to temp_sbatch_script.sh")
     
-    stdout, stderr = run_ssh_command(slurm_host, "cat > temp_sbatch_script.sh < temp_sbatch_script.sh")
-    if stderr:
-        logging.error(f"Error copying script to remote host: {stderr}")
-        return None, f"Error copying script to remote host: {stderr}"
+    # Use scp to transfer the file
+    scp_command = f"scp temp_sbatch_script.sh {slurm_host}:temp_sbatch_script.sh"
+    result = subprocess.run(scp_command, shell=True, capture_output=True, text=True)
+    if result.returncode != 0:
+        logging.error(f"Error copying script to remote host: {result.stderr}")
+        return None, f"Error copying script to remote host: {result.stderr}"
+    
+    # Verify the file content on the remote host
+    stdout, stderr = run_ssh_command(slurm_host, "cat temp_sbatch_script.sh")
+    logging.debug(f"Content of script on remote host:\n{stdout}")
     
     stdout, stderr = run_ssh_command(slurm_host, "sbatch temp_sbatch_script.sh")
     if stderr:
