@@ -1,9 +1,9 @@
 import dash_bootstrap_components as dbc
 from dash import html, dcc
+from copick_live.album_utils import get_catalogs
 
-def layout(album_instance):
-    index_data = album_instance.get_index_as_dict()
-    catalogs = index_data['catalogs']
+def layout():
+    catalogs = get_catalogs()
 
     catalog_cards = []
     for catalog in catalogs:

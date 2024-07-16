@@ -1,3 +1,4 @@
+import json
 import os
 import tempfile
 from typing import Optional
@@ -7,6 +8,8 @@ import album
 from album.api import Album
 from album.runner.core.model.coordinates import Coordinates
 from datetime import datetime
+from copick_live.album_utils import run_solution, install_solution, uninstall_solution, test_solution
+
 
 from celery import Celery
 
@@ -99,36 +102,23 @@ def check_slurm_job_status(self, celery_task_id: str, job_id: str, metadata: Opt
         check_slurm_job_status.apply_async((celery_task_id, job_id), countdown=60, kwargs={'metadata': metadata})
         return {'status': 'SLURM job running', 'job_id': job_id}
 
-@celery_app.task(bind=True)
-def run_album_solution(self, catalog: str, group: str, name: str, version: str, args: Optional[str] = None):
-    solution = f"{catalog}:{group}:{name}:{version}"
-    if isinstance(args, str):
-        args_list = ["", args]
-    elif isinstance(args, list):
-        args_list = [""] + args
-    else:
-        args_list = [""]
-
-    metadata = {
-        'album_solution': solution,
-        'args': args_list,
-        'submission_time': datetime.utcnow().isoformat()
-    }
+@celery_app.task
+def run_album_solution(catalog, group, name, version, args_json):
+    args_dict = json.loads(args_json)
+    args_list = [""]
+    for key, value in args_dict.items():
+        args_list.extend([f"--{key}", value])
     
-    self.update_state(state=states.STARTED, meta=metadata)
-    album_instance.run(solution, args_list)
+    return run_solution(catalog, group, name, version, args_list)
 
 @celery_app.task
-def install_album_solution(catalog: str, group: str, name: str, version: str):
-    solution = f"{catalog}:{group}:{name}:{version}"
-    album_instance.install(solution)
+def install_album_solution(catalog, group, name, version):
+    return install_solution(catalog, group, name, version)
 
 @celery_app.task
-def uninstall_album_solution(catalog: str, group: str, name: str, version: str):
-    solution = f"{catalog}:{group}:{name}:{version}"
-    album_instance.uninstall(solution)
+def uninstall_album_solution(catalog, group, name, version):
+    return uninstall_solution(catalog, group, name, version)
 
 @celery_app.task
-def test_album_solution(catalog: str, group: str, name: str, version: str):
-    solution = f"{catalog}:{group}:{name}:{version}"
-    album_instance.test(solution)
+def test_album_solution(catalog, group, name, version):
+    return test_solution(catalog, group, name, version)

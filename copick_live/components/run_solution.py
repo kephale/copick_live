@@ -1,9 +1,9 @@
 import dash_bootstrap_components as dbc
 from dash import html, dcc, callback, Input, Output, State
-import json
+from copick_live.album_utils import get_catalogs, get_groups, get_names, get_versions, get_solution_args
 
-def layout(album_instance):
-    catalogs = album_instance.get_index_as_dict()['catalogs']
+def layout():
+    catalogs = get_catalogs()
     
     return html.Div([
         html.H1("Run Solution"),
@@ -46,51 +46,39 @@ def layout(album_instance):
                 ], width=6),
             ]),
         ]),
-        dcc.Store(id='album-index', data=album_instance.get_index_as_dict())
     ])
 
 @callback(
     Output("group-input", "options"),
-    Input("catalog-input", "value"),
-    State('album-index', 'data')
+    Input("catalog-input", "value")
 )
-def update_groups(catalog, index_data):
+def update_groups(catalog):
     if not catalog:
         return []
-    groups = set()
-    for solution in next(cat for cat in index_data['catalogs'] if cat['name'] == catalog)['solutions']:
-        groups.add(solution['setup']['group'])
+    groups = get_groups(catalog)
     return [{'label': group, 'value': group} for group in groups]
 
 @callback(
     Output("name-input", "options"),
     Input("catalog-input", "value"),
-    Input("group-input", "value"),
-    State('album-index', 'data')
+    Input("group-input", "value")
 )
-def update_names(catalog, group, index_data):
+def update_names(catalog, group):
     if not catalog or not group:
         return []
-    names = set()
-    for solution in next(cat for cat in index_data['catalogs'] if cat['name'] == catalog)['solutions']:
-        if solution['setup']['group'] == group:
-            names.add(solution['setup']['name'])
+    names = get_names(catalog, group)
     return [{'label': name, 'value': name} for name in names]
 
 @callback(
     Output("version-input", "options"),
     Input("catalog-input", "value"),
     Input("group-input", "value"),
-    Input("name-input", "value"),
-    State('album-index', 'data')
+    Input("name-input", "value")
 )
-def update_versions(catalog, group, name, index_data):
+def update_versions(catalog, group, name):
     if not catalog or not group or not name:
         return []
-    versions = []
-    for solution in next(cat for cat in index_data['catalogs'] if cat['name'] == catalog)['solutions']:
-        if solution['setup']['group'] == group and solution['setup']['name'] == name:
-            versions.append(solution['setup']['version'])
+    versions = get_versions(catalog, group, name)
     return [{'label': version, 'value': version} for version in versions]
 
 @callback(
@@ -98,19 +86,16 @@ def update_versions(catalog, group, name, index_data):
     Input("catalog-input", "value"),
     Input("group-input", "value"),
     Input("name-input", "value"),
-    Input("version-input", "value"),
-    State('album-index', 'data')
+    Input("version-input", "value")
 )
-def update_dynamic_args(catalog, group, name, version, index_data):
+def update_dynamic_args(catalog, group, name, version):
     if not catalog or not group or not name or not version:
         return []
-    solution = next((sol for sol in next(cat for cat in index_data['catalogs'] if cat['name'] == catalog)['solutions']
-                     if sol['setup']['group'] == group and sol['setup']['name'] == name and sol['setup']['version'] == version), None)
-    if not solution:
-        return []
+    
+    args = get_solution_args(catalog, group, name, version)
     
     arg_inputs = []
-    for arg in solution['setup']['args']:
+    for arg in args:
         arg_inputs.append(dbc.Row([
             dbc.Col([
                 dbc.Label(f"{arg['name']} ({arg['type']}){'*' if arg.get('required') else ''}"),
