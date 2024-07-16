@@ -27,10 +27,10 @@ def get_solution_args(catalog, group, name, version):
     return solution['setup']['args'] if solution else []
 
 def get_recently_executed_solutions():
-    return get_album_instance().get_collection_index().get_recently_launched_solutions()[::-1]
+    return get_album_instance().get_collection_index().get_recently_launched_solutions()
 
 def get_recently_installed_solutions():
-    return get_album_instance().get_collection_index().get_recently_installed_solutions()[::-1]
+    return get_album_instance().get_collection_index().get_recently_installed_solutions()
 
 def run_solution(catalog, group, name, version, args):
     return get_album_instance().run(f"{catalog}:{group}:{name}:{version}", args)
