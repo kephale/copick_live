@@ -72,7 +72,7 @@ def create_app():
             html.Div(browser_cache),
         ],
     )
-    register_recently_executed_callbacks(app, album_instance)
+    # register_recently_executed_callbacks(app, album_instance)
     
     return app
 
