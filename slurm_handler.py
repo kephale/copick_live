@@ -64,7 +64,6 @@ def check_job_status(slurm_host, job_id):
 if __name__ == "__main__":
     script_path = os.path.abspath(__file__)
     logging.info(f"Script path: {script_path}")
-    print(f"Script path: {script_path}")
     
     logging.info(f"slurm_handler.py called with arguments: {sys.argv}")
     if len(sys.argv) < 3:
