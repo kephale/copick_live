@@ -147,9 +147,12 @@ def submit_slurm(n_clicks, catalog, group, name, version, slurm_host, arg_values
         if arg_value:
             args[arg_id['index']] = arg_value
     
-    logger.info(f"Submitting SLURM job for {catalog}:{group}:{name}:{version} on {slurm_host}")
+    # Convert the arguments to album format for the command line
+    args_str = ' '.join([f'--{k} {v}' for k, v in args.items()])
+    
+    logger.info(f"Submitting SLURM job for {catalog}:{group}:{name}:{version} on {slurm_host} with args: {args_str}")
     try:
-        task = submit_slurm_job.delay(catalog, group, name, version, slurm_host, args=json.dumps(args))
+        task = submit_slurm_job.delay(catalog, group, name, version, slurm_host, args=args_str)
         logger.info(f"SLURM job submission task created with ID: {task.id}")
         return dcc.Loading(id="loading-submit-slurm", children=[
             html.Div(f"SLURM job submission started with task ID: {task.id}"),

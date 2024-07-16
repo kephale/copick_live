@@ -28,8 +28,7 @@ album_instance.load_or_create_collection()
 def submit_slurm_job(self, catalog: str, group: str, name: str, version: str, slurm_host: str, gpus: int = 0, cpus: int = 24, memory: str = "125G", args: str = None):
     job_name = f"{catalog}_{group}_{name}_{version}"
     
-    args_str = args if args else ""
-    album_command = f"album run {catalog}:{group}:{name}:{version} {args_str}"
+    album_command = f"album run {catalog}:{group}:{name}:{version} {args}"
     
     sbatch_script = f"""#!/bin/bash
 #SBATCH --job-name={job_name}
@@ -42,10 +41,7 @@ def submit_slurm_job(self, catalog: str, group: str, name: str, version: str, sl
 #SBATCH --mem={memory}
 {"#SBATCH --gpus=" + str(gpus) if gpus > 0 else ""}
 
-# micromamba activate album-nexus
-# {album_command}
-
-micromamba run -n album-nexus {album_command}    
+micromamba run -n album-nexus {album_command}
 """
 
     try:
