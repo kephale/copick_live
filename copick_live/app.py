@@ -57,7 +57,7 @@ def create_app():
                     dbc.Row(
                         [
                             # dbc.Col([tomo_progress(), unlabelled_tomos()], width=3),
-                            dbc.Col([run_solution_layout(album_instance)], width=3),
+                            dbc.Col([run_solution_layout(album_instance), recently_executed_layout(album_instance)], width=3),
                             dbc.Col(ranking(), width=3),
                             dbc.Col(composition(), width=3),
                             dbc.Col(protein_sts(), width=3),
