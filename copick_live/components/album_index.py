@@ -1,6 +1,6 @@
 import dash_bootstrap_components as dbc
 from dash import html, dcc
-from copick_live.album_utils import get_catalogs
+from copick_live.utils.album_utils import get_catalogs
 
 def layout():
     catalogs = get_catalogs()

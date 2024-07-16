@@ -1,7 +1,7 @@
 import dash_bootstrap_components as dbc
 from dash import html, dcc, callback
 from dash.dependencies import Input, Output, State
-from copick_live.album_utils import get_recently_executed_solutions
+from copick_live.utils.album_utils import get_recently_executed_solutions
 
 def create_solution_card(solution):
     return dbc.Card([

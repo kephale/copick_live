@@ -8,7 +8,7 @@ import album
 from album.api import Album
 from album.runner.core.model.coordinates import Coordinates
 from datetime import datetime
-from copick_live.album_utils import run_solution, install_solution, uninstall_solution, test_solution
+from copick_live.utils.album_utils import run_solution, install_solution, uninstall_solution, test_solution
 
 
 from celery import Celery
