@@ -8,7 +8,8 @@ def create_solution_card(solution):
         dbc.CardBody([
             html.H5(solution['group'], className="card-title"),
             html.P(solution['description'], className="card-text"),
-            dbc.Button("Run Again", href=f"/run-solution/{solution['catalog']}/{solution['group']}/{solution['name']}/{solution['version']}", color="primary"),
+            # dbc.Button("Run Again", href=f"/run-solution/{solution['catalog']}/{solution['group']}/{solution['name']}/{solution['version']}", color="primary"),
+            dbc.Button("Run Again", href=f"/run-solution/cellcanvas/{solution['group']}/{solution['name']}/{solution['version']}", color="primary"),
         ]),
     ], className="mb-3")
 
