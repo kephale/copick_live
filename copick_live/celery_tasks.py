@@ -53,20 +53,25 @@ micromamba run -n album-nexus {album_command}
         if result.returncode != 0:
             raise Exception(f"slurm_handler.py failed with return code {result.returncode}. Stderr: {result.stderr}")
         
-        try:
-            output = json.loads(result.stdout)
-        except json.JSONDecodeError as e:
-            raise Exception(f"Failed to parse JSON output from slurm_handler.py: {str(e)}. Output was: {result.stdout}")
+        # Parse the mixed output
+        lines = result.stdout.strip().split('\n')
+        slurm_output = lines[0]  # Assuming the first line is always the SLURM output
+        json_output = '\n'.join(lines[1:])  # The rest should be our JSON output
         
-        if output.get('error'):
-            raise Exception(f"Failed to submit SLURM job: {output['error']}")
+        try:
+            parsed_output = json.loads(json_output)
+        except json.JSONDecodeError as e:
+            raise Exception(f"Failed to parse JSON output from slurm_handler.py: {str(e)}. JSON output was: {json_output}")
+        
+        if parsed_output.get('error'):
+            raise Exception(f"Failed to submit SLURM job: {parsed_output['error']}")
 
-        job_id = output.get('job_id')
+        job_id = parsed_output.get('job_id')
         if not job_id:
-            raise Exception(f"No job ID returned from slurm_handler.py. Output was: {output}")
+            raise Exception(f"No job ID returned from slurm_handler.py. Parsed output was: {parsed_output}")
 
-        self.update_state(state=states.SUCCESS, meta={'job_id': job_id, 'slurm_host': slurm_host})
-        return {'job_id': job_id, 'slurm_host': slurm_host}
+        self.update_state(state=states.SUCCESS, meta={'job_id': job_id, 'slurm_host': slurm_host, 'slurm_output': slurm_output})
+        return {'job_id': job_id, 'slurm_host': slurm_host, 'slurm_output': slurm_output}
     
     except Exception as e:
         logging.exception("Error in submit_slurm_job task")
