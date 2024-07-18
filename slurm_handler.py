@@ -22,6 +22,7 @@ def reset_terminal_mode(oldtty):
 
 def run_ssh_command(hostname, command):
     ssh_command = f"ssh {hostname} '{command}'"
+    logging.debug(f"Executing SSH command: {ssh_command}")
     child = pexpect.spawn(ssh_command)
     child.logfile_read = sys.stdout.buffer
     
@@ -33,6 +34,7 @@ def run_ssh_command(hostname, command):
             break
     
     child.close()
+    logging.debug(f"SSH command output: {output}")
     return output.strip()
 
 def submit_job(slurm_host, sbatch_script):
@@ -62,11 +64,17 @@ def submit_job(slurm_host, sbatch_script):
 
 def check_job_status(slurm_host, job_id):
     output = run_ssh_command(slurm_host, f"squeue -j {job_id} -h")
+    logging.debug(f"Raw squeue output: {output}")
     
     if output.strip():
-        return "RUNNING", None
+        status = "RUNNING"
     else:
-        return "COMPLETED", None
+        status = "COMPLETED"
+    
+    response = json.dumps({"status": status, "error": None, "raw_output": output})
+    logging.debug(f"Returning response: {response}")
+    print(response)  # This will be captured by the subprocess.run in celery_tasks.py
+    return response
 
 def get_job_output(slurm_host, job_id):
     output = run_ssh_command(slurm_host, f"cat slurm-{job_id}.out")

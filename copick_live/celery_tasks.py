@@ -94,8 +94,21 @@ def check_slurm_job_status(self, job_id: str, slurm_host: str):
     try:
         result = subprocess.run(['python', 'slurm_handler.py', 'status', slurm_host, job_id], capture_output=True, text=True)
         
+        logger.debug(f"slurm_handler.py stdout: {result.stdout}")
+        logger.debug(f"slurm_handler.py stderr: {result.stderr}")
+        
+        if result.returncode != 0:
+            raise Exception(f"slurm_handler.py failed with return code {result.returncode}. Stderr: {result.stderr}")
+        
+        # Extract the JSON part of the output
+        json_start = result.stdout.find('{')
+        json_end = result.stdout.rfind('}') + 1
+        json_output = result.stdout[json_start:json_end]
+        
+        logger.debug(f"Extracted JSON output: {json_output}")
+        
         try:
-            output = json.loads(result.stdout)
+            output = json.loads(json_output)
         except json.JSONDecodeError as e:
             raise Exception(f"Failed to parse JSON output from slurm_handler.py: {str(e)}. Output was: {result.stdout}")
         
@@ -103,8 +116,12 @@ def check_slurm_job_status(self, job_id: str, slurm_host: str):
             raise Exception(f"Failed to check SLURM job status: {output['error']}")
         
         status = output.get('status')
+        raw_output = output.get('raw_output')
+        
         if not status:
             raise Exception(f"No status returned from slurm_handler.py. Output was: {output}")
+        
+        logger.info(f"Job status: {status}, Raw output: {raw_output}")
         
         if status == "COMPLETED":
             # Fetch job output
@@ -114,21 +131,20 @@ def check_slurm_job_status(self, job_id: str, slurm_host: str):
             except json.JSONDecodeError:
                 output_data = {'output': 'Failed to retrieve job output'}
             
-            return {'status': status, 'output': output_data.get('output', '')}
+            return {'status': status, 'output': output_data.get('output', ''), 'raw_output': raw_output}
         else:
-            self.update_state(state=states.STARTED, meta={'status': status})
+            self.update_state(state=states.STARTED, meta={'status': status, 'raw_output': raw_output})
             check_slurm_job_status.apply_async((job_id, slurm_host), countdown=60)
-            return {'status': status}
+            return {'status': status, 'raw_output': raw_output}
 
     except Exception as e:
-        logging.exception("Error in check_slurm_job_status task")
+        logger.exception("Error in check_slurm_job_status task")
         self.update_state(state=states.FAILURE, meta={
             'exc_type': type(e).__name__,
             'exc_message': str(e),
             'exc_args': e.args
         })
         raise
-
 
 @celery_app.task(bind=True)
 def run_album_solution(self, catalog, group, name, version, args_json):
